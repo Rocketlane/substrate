@@ -41,6 +41,8 @@ import (
 	ateapi "go.ate.dev/substrate/api/ateapi/v1"
 	"go.ate.dev/substrate/internal/ateclient"
 	"go.ate.dev/substrate/internal/resources"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -54,9 +56,9 @@ type idleState struct {
 }
 
 type gateway struct {
-	api    *ateclient.Client
-	dialer *ateclient.RouterDialer
-	egress *ateapi.EgressPolicy // applied to every actor created here; nil = none
+	api     *ateclient.Client
+	dialer  *ateclient.RouterDialer
+	egress  *ateapi.EgressPolicy // applied to every actor created here; nil = none
 	maxIdle time.Duration
 
 	mu   sync.Mutex
@@ -142,7 +144,12 @@ func actorJSON(a *ateapi.Actor, extra map[string]any) map[string]any {
 
 func (g *gateway) fail(w http.ResponseWriter, op string, err error) {
 	slog.Warn("control call failed", "op", op, "err", err)
-	writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("%s: %v", op, err)})
+	code := http.StatusBadGateway
+	if status.Code(err) == codes.NotFound {
+		// The actor (or its atespace) does not exist: clients treat this as gone, not as a gateway failure.
+		code = http.StatusNotFound
+	}
+	writeJSON(w, code, map[string]any{"error": fmt.Sprintf("%s: %v", op, err)})
 }
 
 func (g *gateway) createActor(w http.ResponseWriter, r *http.Request) {
