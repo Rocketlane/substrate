@@ -1,0 +1,84 @@
+# Copyright 2026 The Agent Substrate Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Kubernetes permissions for cmd/ate-local-gateway running outside the cluster
+# (e.g. as a sidecar of an ECS service). Map the gateway's IAM role to the
+# group ate-local-gateway with an EKS access entry (kubernetes_groups), no EKS
+# access policy. The gateway:
+#   - port-forwards to ate-api-server and atenet-router (services get, pods
+#     list, pods/portforward create);
+#   - mints the ate-client ServiceAccount token for ate-api-server's API. That
+#     ServiceAccount is a bootstrap owner of the install by default, so the
+#     gateway can do anything through ate-api-server;
+#   - requests its atenet-router client certificate as atenet-client through a
+#     PodCertificateRequest;
+#   - reads ClusterTrustBundles to verify ate-api-server and atenet-router.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ate-local-gateway
+  namespace: ate-system
+rules:
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/portforward"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  resourceNames: ["ate-client"]
+  verbs: ["create"]
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["podcertificaterequests"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ate-local-gateway
+  namespace: ate-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ate-local-gateway
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: ate-local-gateway
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ate-local-gateway
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["clustertrustbundles"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ate-local-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ate-local-gateway
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: ate-local-gateway

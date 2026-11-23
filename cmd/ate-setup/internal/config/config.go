@@ -89,6 +89,16 @@ type Config struct {
 	// Kind selects the local Kind install profile (ATE_INSTALL_KIND).
 	Kind bool
 
+	// EKS selects the Amazon EKS install profile (ATE_INSTALL_EKS): the eks
+	// overlays, S3 snapshot storage with EKS Pod Identity credentials and
+	// gVisor sandboxes only.
+	EKS bool
+
+	// EKSRegion is the AWS region of the EKS cluster and its snapshot bucket
+	// (ATE_EKS_REGION). The object-store plugin needs it explicitly: pods get
+	// Pod Identity credentials but cannot read the region from instance metadata.
+	EKSRegion string
+
 	// Namespace is the namespace the control plane is installed into, from
 	// ATE_NAMESPACE. It defaults to the canonical installdefaults.SystemNamespace,
 	// so an install that does not set it is unaffected. The checked-in manifests
@@ -306,7 +316,8 @@ func (c *Config) TransferServiceAccount() string {
 // exchange impersonates the account and refuses to start without one.
 // ate-setup installs GCS everywhere but kind, which uses S3.
 func (c *Config) RequireTransferServiceAccount() error {
-	if c.Kind {
+	// Kind and EKS store snapshots in S3, which has no transfer service account.
+	if c.Kind || c.EKS {
 		return nil
 	}
 	if c.TransferGSAName == "" {

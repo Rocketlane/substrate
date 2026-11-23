@@ -33,6 +33,9 @@ var notFromASetting = map[string]bool{
 	// kindCluster.enabled feeds Kind, but the fixture sets it false to reach
 	// the cloud path, so its zero value here says nothing.
 	"Kind": true,
+	// Likewise eksCluster.enabled feeds EKS: the EKS profile clears the GCP
+	// coordinates, so the fixture leaves it false.
+	"EKS": true,
 }
 
 // A Config field that no setting feeds stays at its zero value however the
@@ -48,7 +51,7 @@ func TestEveryConfigFieldIsFedBySomeSetting(t *testing.T) {
 		case KindBool:
 			// A Kind install clears the GCP coordinates by design, so the
 			// cloud path is the one that exercises every field.
-			env[s.Env] = strconv.FormatBool(s.Key != "kindCluster.enabled")
+			env[s.Env] = strconv.FormatBool(s.Key != "kindCluster.enabled" && s.Key != "eksCluster.enabled")
 		case KindInt:
 			env[s.Env] = "7"
 		case KindDuration:

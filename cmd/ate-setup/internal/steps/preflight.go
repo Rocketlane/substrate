@@ -39,6 +39,9 @@ func (e *Env) RequireControlPlane(ctx context.Context) error {
 	if e.Cfg.Kind {
 		flags += " --kind"
 	}
+	if e.Cfg.EKS {
+		flags += fmt.Sprintf(" --eks --eks-region=%q", e.Cfg.EKSRegion)
+	}
 	if e.Cfg.Context != "" {
 		flags += fmt.Sprintf(" --context=%q", e.Cfg.Context)
 	}

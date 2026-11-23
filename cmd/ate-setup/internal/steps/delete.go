@@ -48,17 +48,24 @@ func (e *Env) DeleteAteSystem(ctx context.Context) error {
 		return err
 	}
 
-	if e.Cfg.Kind {
-		manifest, err := e.Kustomize(installDir + "/kind")
+	if e.Cfg.Kind || e.Cfg.EKS {
+		bundle := installDir + "/kind"
+		if e.Cfg.EKS {
+			bundle = installDir + "/eks"
+		}
+		manifest, err := e.Kustomize(bundle)
 		if err != nil {
 			return err
 		}
 		if err := e.Kube.DeleteBytes(ctx, manifest); err != nil {
 			return err
 		}
-		// Not part of the kind bundle (see its kustomization), so it goes by
-		// name. The directory delete below covers it on every other install.
+		// Not part of the kind or eks bundle (see their kustomizations), so it
+		// goes by name. The directory delete below covers it on every other install.
 		if err := e.Kube.DeletePath(ctx, e.Cfg.Manifest("pod-certificate-controller.yaml")); err != nil {
+			return err
+		}
+		if err := e.deleteEKSPrerequisites(ctx); err != nil {
 			return err
 		}
 	} else if err := e.Kube.DeletePath(ctx, e.Cfg.Manifest()); err != nil {

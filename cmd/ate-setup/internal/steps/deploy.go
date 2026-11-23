@@ -89,6 +89,11 @@ func (e *Env) DeployAteSystem(ctx context.Context, opts DeployOptions) error {
 	if err != nil {
 		return err
 	}
+	// microVM guest assets are staged to GCS (or in-cluster rustfs on Kind);
+	// the eks profile has neither, and EKS nodes rarely expose /dev/kvm.
+	if e.Cfg.EKS && microvm {
+		return fmt.Errorf("--eks installs gVisor sandboxes only; pass --sandbox-classes=gvisor")
+	}
 	// The snapshot location is only written into ate-api-server's ConfigMap
 	// partway through, so check it before the cluster is touched.
 	if _, err := clusterSnapshotLocation(e.Cfg.SnapshotLocation, e.Cfg.PreviewGates); err != nil {
@@ -107,6 +112,11 @@ func (e *Env) DeployAteSystem(ctx context.Context, opts DeployOptions) error {
 
 	// The namespace has to exist before RBAC or CRDs are applied.
 	if err := e.EnsureAteSystemNamespace(ctx); err != nil {
+		return err
+	}
+	// Before PostgreSQL (its volume uses the encrypted StorageClass) and the
+	// bundle (its object-store plugins read the region ConfigMap).
+	if err := e.applyEKSPrerequisites(ctx); err != nil {
 		return err
 	}
 
@@ -375,6 +385,9 @@ func (e *Env) apiServerManifestPath() string {
 	if e.Cfg.Kind {
 		return e.Cfg.Manifest("kind", "ate-api-server")
 	}
+	if e.Cfg.EKS {
+		return e.Cfg.Manifest("eks", "ate-api-server")
+	}
 	return e.Cfg.Manifest("ate-api-server.yaml")
 }
 
@@ -544,6 +557,9 @@ func (e *Env) DeployAtelet(ctx context.Context) error {
 func (e *Env) ateletManifestPath() string {
 	if e.Cfg.Kind {
 		return e.Cfg.Manifest("kind", "atelet")
+	}
+	if e.Cfg.EKS {
+		return e.Cfg.Manifest("eks", "atelet")
 	}
 	return e.Cfg.Manifest("atelet.yaml")
 }

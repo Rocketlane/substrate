@@ -1,0 +1,25 @@
+# Copyright 2026 The Agent Substrate Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# EKS has no managed OpenTelemetry collector to default to. Export is disabled;
+# ate-setup --otlp-endpoint overrides the endpoint (and an operator can drop
+# OTEL_SDK_DISABLED) once a collector exists.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ate-otel-config
+  namespace: ate-system
+data:
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4317
+  OTEL_SDK_DISABLED: "true"

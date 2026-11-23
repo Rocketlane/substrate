@@ -93,6 +93,8 @@ func SystemOverlay(cfg *config.Config) string {
 		return installDir + "/agentgateway"
 	case cfg.Kind:
 		return installDir + "/kind"
+	case cfg.EKS:
+		return installDir + "/eks"
 	default:
 		return installDir + "/base"
 	}
@@ -593,6 +595,9 @@ func (e *Env) applyAtenetEgress(ctx context.Context, providers []config.Credenti
 func (e *Env) otelConfigPath() string {
 	if e.Cfg.Kind {
 		return e.Cfg.Manifest("kind", "ate-otel-config.yaml")
+	}
+	if e.Cfg.EKS {
+		return e.Cfg.Manifest("eks", "ate-otel-config.yaml")
 	}
 	return e.Cfg.Manifest("ate-otel-config.yaml")
 }

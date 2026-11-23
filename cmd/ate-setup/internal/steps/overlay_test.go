@@ -1846,3 +1846,9 @@ func TestRemoveFakeWorkersync(t *testing.T) {
 		})
 	}
 }
+
+func TestSystemOverlayEKS(t *testing.T) {
+	if got := SystemOverlay(&config.Config{EKS: true, Router: config.RouterEnvoy}); got != installDir+"/eks" {
+		t.Errorf("SystemOverlay(EKS) = %q, want %q", got, installDir+"/eks")
+	}
+}

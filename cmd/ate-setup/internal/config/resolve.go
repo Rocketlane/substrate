@@ -35,6 +35,9 @@ const (
 	// no channel supplied one. It is not a channel an operator writes to: the
 	// way to override it is any of the three above.
 	OriginKindProfile
+	// OriginEKSProfile is a value an EKS install derived for itself because no
+	// channel supplied one; like OriginKindProfile, override it with any channel.
+	OriginEKSProfile
 )
 
 // Describe names the origin the way the operator would refer to it, so an
@@ -49,6 +52,8 @@ func (o Origin) Describe(s Setting) string {
 		return "--" + s.Flag
 	case OriginKindProfile:
 		return "the --kind profile"
+	case OriginEKSProfile:
+		return "the --eks profile"
 	default:
 		return "default"
 	}

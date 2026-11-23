@@ -1,0 +1,36 @@
+# Copyright 2026 The Agent Substrate Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Amazon EKS install (ate-setup --eks). Differs from ../base in:
+#   - ./atelet, ./ate-api-server: snapshots in S3 with EKS Pod Identity credentials
+#     (no static keys; region from the ate-eks-config ConfigMap ate-setup writes),
+#     and atelet's image credential provider at the EKS AL2023 node paths.
+#   - ate-otel-config.yaml: no managed collector on EKS, so export is disabled
+#     until --otlp-endpoint names one.
+#   - atenet-router-monitoring.yaml is left out: it needs the GKE managed
+#     Prometheus CRDs.
+# ./prereqs (StorageClass, gateway RBAC) is applied by ate-setup before
+# PostgreSQL, so it is not part of this bundle. pod-certificate-controller.yaml
+# is applied by ate-setup on its own, as for kind.
+resources:
+  - ./ate-api-server
+  - ../ate-idp-server.yaml
+  - ../ate-controller.yaml
+  - ./atelet
+  - ../atenet-router.yaml
+  - ../ate-system-networkpolicies.yaml
+  - ate-otel-config.yaml

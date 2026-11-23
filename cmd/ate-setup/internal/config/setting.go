@@ -83,6 +83,14 @@ var Registry = []Setting{
 		Usage: "Name of the Kind cluster to target",
 	},
 	{
+		Key: "eksCluster.enabled", Env: "ATE_INSTALL_EKS", Flag: "eks", Kind: KindBool, Default: "false",
+		Usage: "Target an Amazon EKS cluster: eks overlays, S3 snapshot storage with EKS Pod Identity credentials, gVisor sandboxes only",
+	},
+	{
+		Key: "eksCluster.region", Env: "ATE_EKS_REGION", Flag: "eks-region", Kind: KindString,
+		Usage: "AWS region of the EKS cluster and its snapshot bucket (required with --eks)",
+	},
+	{
 		Key: "namespace", Env: "ATE_NAMESPACE", Flag: "namespace", Kind: KindString,
 		Default: installdefaults.SystemNamespace,
 		Usage:   "Namespace the control plane is installed into",

@@ -168,6 +168,9 @@ func buildConfig(root string, env map[string]string, r *Resolved) (*Config, erro
 	if r.Bool(kindEnabledKey) {
 		applyKindDefaults(r)
 	}
+	if r.Bool(eksEnabledKey) {
+		applyEKSDefaults(r)
+	}
 
 	rolloutTimeout := r.Duration("rolloutTimeout")
 	if r.Supplied("rolloutTimeout") && rolloutTimeout <= 0 {
@@ -215,6 +218,8 @@ func buildConfig(root string, env map[string]string, r *Resolved) (*Config, erro
 	cfg := &Config{
 		Root:              root,
 		Kind:              r.Bool("kindCluster.enabled"),
+		EKS:               r.Bool(eksEnabledKey),
+		EKSRegion:         r.String("eksCluster.region"),
 		Namespace:         r.String("namespace"),
 		Kubeconfig:        kubeconfig,
 		Context:           r.String("context"),
@@ -363,6 +368,39 @@ func applyKindDefaults(r *Resolved) {
 	}
 }
 
+// eksEnabledKey selects the EKS profile.
+const eksEnabledKey = "eksCluster.enabled"
+
+// eksPostgresStorageClass is the encrypted gp3 StorageClass the eks overlay's
+// prerequisites create (manifests/ate-install/eks/prereqs). The bundled
+// PostgreSQL volume uses it unless another class is named.
+const eksPostgresStorageClass = "ate-gp3-encrypted"
+
+// applyEKSDefaults fills the EKS-only settings, leaving alone any a channel
+// supplied. Like the Kind profile it writes into the resolved set, so the
+// report and the install record name what the install uses.
+func applyEKSDefaults(r *Resolved) {
+	// No GCP project: clear the coordinates and the transfer service account
+	// a developer environment may have named.
+	for _, key := range []string{"gcp.projectID", "gcp.clusterLocation", "storage.transferGSAName"} {
+		if r.String(key) != "" {
+			r.set(key, "", OriginEKSProfile)
+		}
+	}
+	// Snapshots live in the S3 bucket; the backend comes from the overlay, the
+	// scheme is informational (see resources.parseStorageURI).
+	if !namedExplicitly(r, "storage.snapshotLocation") && r.String("storage.bucketName") != "" {
+		r.set("storage.snapshotLocation", "s3://"+r.String("storage.bucketName")+"/", OriginEKSProfile)
+	}
+	if r.String("ateapi.postgres.storageClass") == "" {
+		r.set("ateapi.postgres.storageClass", eksPostgresStorageClass, OriginEKSProfile)
+	}
+	// EKS node groups are commonly Graviton or x86; build both unless told.
+	if !namedExplicitly(r, "ko.defaultPlatforms") {
+		r.set("ko.defaultPlatforms", "linux/amd64,linux/arm64", OriginEKSProfile)
+	}
+}
+
 // namedExplicitly reports whether a flag or configuration file supplied the
 // setting, as opposed to it arriving from the ambient environment or a default.
 func namedExplicitly(r *Resolved, key string) bool {
@@ -385,6 +423,24 @@ func validateResolved(cfg *Config, r *Resolved) error {
 	case !cfg.Images.IsPrebuilt() && cfg.Images.Tag != "":
 		return &ConflictError{A: tag, B: repo,
 			Why: "without a repository, images are built from source and the tag names nothing"}
+	}
+
+	if cfg.EKS {
+		if cfg.Kind {
+			kind, _ := r.Value(kindEnabledKey)
+			eks, _ := r.Value(eksEnabledKey)
+			return &ConflictError{A: kind, B: eks, Why: "an install targets either a Kind or an EKS cluster"}
+		}
+		for _, key := range []string{"eksCluster.region", "storage.bucketName"} {
+			if err := r.Require(key); err != nil {
+				return err
+			}
+		}
+		if cfg.Router == RouterAgentgateway {
+			dp, _ := r.Value("atenet.dataplane")
+			eks, _ := r.Value(eksEnabledKey)
+			return &ConflictError{A: dp, B: eks, Why: "the eks overlays support the envoy dataplane only"}
+		}
 	}
 
 	dataplane, _ := r.Value("atenet.dataplane")
