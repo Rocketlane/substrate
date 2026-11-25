@@ -18,6 +18,10 @@
 //
 //   - Egress: actors are default-deny outbound. If --egress-policy names a protojson EgressPolicy file, every actor
 //     created here gets it (before its first wake), e.g. TLS passthrough to *:443 + plain HTTP to the host's /mcp.
+//
+//   - --in-cluster: run as a pod (see manifests/ate-local-gateway). It uses the pod's ServiceAccount and dials the
+//     ate-api-server and atenet-router Services directly instead of port-forwarding. GET /healthz answers on the
+//     control port.
 package main
 
 import (
@@ -72,6 +76,7 @@ func main() {
 	kctx := flag.String("context", "kind-kind", "kubeconfig context")
 	defaultTimeout := flag.Duration("default-timeout", 20*time.Minute, "idle timeout for actors created without one")
 	egressFile := flag.String("egress-policy", "", "protojson EgressPolicy applied to every actor created via the control API")
+	inCluster := flag.Bool("in-cluster", false, "run inside the cluster: use the pod's ServiceAccount and dial the Substrate Services directly instead of port-forwarding")
 	maxIdle := flag.Duration("max-idle", 0, "cap on any actor's idle timeout (0 = no cap). Each running actor holds a whole worker, so a small pool needs finished sandboxes suspended quickly")
 	flag.Parse()
 
@@ -88,13 +93,22 @@ func main() {
 	}
 
 	ctx := context.Background()
-	api, err := ateclient.NewClient(ctx, *kubeconfig, *kctx, "", "", false)
+	apiEndpoint := "" // port-forward
+	if *inCluster {
+		// Empty kubeconfig and context fall back to the pod's in-cluster config.
+		*kubeconfig, *kctx = "", ""
+		apiEndpoint = ateclient.APIServerAddress()
+	}
+	api, err := ateclient.NewClient(ctx, *kubeconfig, *kctx, apiEndpoint, "", false)
 	if err != nil {
 		fail("connect to ate-api-server", err)
 	}
 	dialer, err := ateclient.NewRouterDialer(ctx, *kubeconfig, *kctx)
 	if err != nil {
 		fail("connect to atenet-router", err)
+	}
+	if *inCluster {
+		dialer.WithAddress(ateclient.RouterServiceAddress())
 	}
 	g := &gateway{api: api, dialer: dialer, egress: egress, idle: map[actorKey]*idleState{}}
 
@@ -103,13 +117,14 @@ func main() {
 	go g.serveProxy(*proxy)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, map[string]any{"ok": true}) })
 	mux.HandleFunc("POST /v1/actors", g.createActor)
 	mux.HandleFunc("POST /v1/actors/{atespace}/{name}/resume", g.resumeActor)
 	mux.HandleFunc("POST /v1/actors/{atespace}/{name}/suspend", g.suspendActor)
 	mux.HandleFunc("POST /v1/actors/{atespace}/{name}/touch", g.touchActor)
 	mux.HandleFunc("GET /v1/actors/{atespace}/{name}", g.getActor)
 	mux.HandleFunc("DELETE /v1/actors/{atespace}/{name}", g.deleteActor)
-	slog.Info("ate-local-gateway ready", "control", *control, "proxy", *proxy)
+	slog.Info("ate-local-gateway ready", "control", *control, "proxy", *proxy, "in_cluster", *inCluster)
 	fail("control API", http.ListenAndServe(*control, mux))
 }
 

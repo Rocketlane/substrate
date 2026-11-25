@@ -1,0 +1,35 @@
+# Copyright 2026 The Agent Substrate Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ate-local-gateway running inside the cluster (--in-cluster), reachable from
+# outside on NodePorts: 30700 (control API) and 30701 (data-plane proxy).
+# Put a load balancer in front of the nodes' NodePorts and keep it private: the
+# gateway does not authenticate its callers.
+#
+#   kubectl apply -k manifests/ate-local-gateway
+#
+# Replace egress-policy.json with the policy every actor created through the
+# gateway should get.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespace.yaml
+- rbac.yaml
+- deployment.yaml
+- service.yaml
+configMapGenerator:
+- name: ate-local-gateway-egress-policy
+  namespace: ate-gateway
+  files:
+  - egress-policy.json

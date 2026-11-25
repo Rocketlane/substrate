@@ -62,6 +62,22 @@ type RouterDialer struct {
 	config    *rest.Config
 	clientset kubernetes.Interface
 	tlsConfig *tls.Config
+	// addr, when set, is dialed directly instead of port-forwarding: a client
+	// running inside the cluster can reach the router Service itself.
+	addr string
+}
+
+// RouterServiceAddress is atenet-router's CONNECT-TLS address for a client
+// running inside the cluster.
+func RouterServiceAddress() string {
+	return fmt.Sprintf("%s:%d", routerServerName(), routerConnectTLSPort)
+}
+
+// WithAddress makes the dialer connect straight to addr (such as
+// RouterServiceAddress()) instead of opening a port-forward per tunnel.
+func (d *RouterDialer) WithAddress(addr string) *RouterDialer {
+	d.addr = addr
+	return d
 }
 
 // NewRouterDialer returns a dialer that reaches atenet-router's CONNECT-TLS
@@ -109,8 +125,12 @@ func NewRouterDialer(ctx context.Context, kubeconfigPath, k8sContext string) (*R
 }
 
 // DialActor opens a CONNECT tunnel through atenet-router to port on actorRef.
-// Closing the returned connection also stops its port-forward.
+// Closing the returned connection also stops its port-forward, if any.
 func (d *RouterDialer) DialActor(ctx context.Context, actorRef resources.ActorRef, port int) (net.Conn, error) {
+	header := http.Header{atenet.TargetActorHeader: []string{actorRef.String()}}
+	if d.addr != "" {
+		return ConnectActorWithHeaders(ctx, d.addr, d.tlsConfig, actorRef, port, header, nil)
+	}
 	// client-go tears down a whole port-forward when any one of its
 	// streams errors, so each tunnel gets its own. That also picks
 	// a ready router pod again after one goes away.
@@ -118,9 +138,7 @@ func (d *RouterDialer) DialActor(ctx context.Context, actorRef resources.ActorRe
 	if err != nil {
 		return nil, err
 	}
-	return ConnectActorWithHeaders(ctx, fmt.Sprintf("127.0.0.1:%d", localPort), d.tlsConfig, actorRef, port, http.Header{
-		atenet.TargetActorHeader: []string{actorRef.String()},
-	}, stop)
+	return ConnectActorWithHeaders(ctx, fmt.Sprintf("127.0.0.1:%d", localPort), d.tlsConfig, actorRef, port, header, stop)
 }
 
 // ConnectActorWithHeaders dials addr over TLS, sends an HTTP CONNECT request

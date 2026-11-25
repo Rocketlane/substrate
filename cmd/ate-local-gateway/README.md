@@ -16,9 +16,11 @@ has no authentication of its own.
 
 ## What it does in the cluster
 
-- Port-forwards to `ate-api-server` and `atenet-router` in `ate-system`.
+- Port-forwards to `ate-api-server` and `atenet-router` in `ate-system` (with
+  `--in-cluster`, dials their Services directly instead).
 - Mints a token for the `ate-client` service account, which is the bootstrap owner
-  of actors, and calls the API with it.
+  of actors, and calls the API with it. It mints a new one before the old one
+  expires.
 - Gets a client certificate for the router through a `PodCertificateRequest`
   signed as `atenet-client`, and trusts the router through its
   `ClusterTrustBundle`.
@@ -33,7 +35,31 @@ an admin credential for the actors.
 go run ./cmd/ate-local-gateway --context kind-kind
 ```
 
-## Running on EKS
+## Running inside the cluster
+
+With `--in-cluster` the gateway runs as a pod: it uses its ServiceAccount, dials
+`ate-api-server` and `atenet-router` directly, and answers `GET /healthz` on the
+control port. `manifests/ate-local-gateway` deploys it in the `ate-gateway`
+namespace (labelled `ate.dev/api-access=true`, which the `ate-system`
+NetworkPolicies admit) with a NodePort Service: 30700 for the control API and
+30701 for the proxy.
+
+```sh
+kubectl apply -k manifests/ate-local-gateway
+```
+
+Set the image with a kustomize `images` entry (the manifests name it
+`ate-local-gateway`), and replace `egress-policy.json` with the policy every actor
+the gateway creates should get.
+
+Clients outside the cluster reach it through the nodes' NodePorts, for example
+behind an internal load balancer. Keep that path private: as above, anything that
+can reach the control port manages every actor `ate-client` owns.
+
+Run one replica. Idle suspend is tracked in the gateway's memory, so a second
+replica could suspend an actor whose tunnels go through the first.
+
+## Running on EKS as a sidecar
 
 Build the image from the repository root:
 
